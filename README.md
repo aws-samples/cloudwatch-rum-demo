@@ -1,10 +1,10 @@
 # Amazon Cloudwatch RUM
 
-Cloudwatch RUM is a Real User Monitoring, released at re:Invent 2021. It's a tool that allows customers to get analytics from the clients web browser on what the consumers interact with their website, the experience of those interactions, and if they are seeing any errors specifically and where. It is fairly easy to setup and supports a number of frameworks. 
+Cloudwatch RUM is a Real User Monitoring, released at re:Invent 2021. It's a tool that allows customers to get analytics from the client’s web browser on what the consumers interact with their website, the experience of those interactions, and if they are seeing any errors specifically and where. It is fairly easy to setup and supports a number of frameworks.
 
-*This demo is meant to help you spin up a quick site that has Cloudwatch RUM configured and ready. Just walk through the README and add the CW RUM snippet to your code and start collecting interactions right away.* 
+*This demo is meant to help you spin up a quick site that has Cloudwatch RUM configured and ready. Just walk through the README and add the Cloudwatch RUM snippet to your code and start collecting interactions right away.* 
 
-1. If you have your own stack you have access to your HTML/JS and just want to deploy Cloudwatch RUM then go [here](https://github.com/waday71/Cloudwatch-RUM-Demo/blob/main/RUMsolo.md). 
+1. If you have your own stack, you have access to your HTML/JS and just want to deploy Cloudwatch RUM then go [here](https://github.com/waday71/Cloudwatch-RUM-Demo/blob/main/RUMsolo.md). 
 
 2. If you need a sample stack (example site) to use for a demo then keep reading below. 
 
@@ -14,12 +14,12 @@ Cloudwatch RUM is a Real User Monitoring, released at re:Invent 2021. It's a too
 1. Save the [Cloudwatch-RUM-Demo/CloudFormation_template.yaml](https://github.com/waday71/Cloudwatch-RUM-Demo/blob/main/CloudFormation_template.yaml) to your system and load the existing template into your CloudFormation console. 
 
 ### *Requirements:*
-Deploys a Website on EC2 Autoscaling groups with a simple html/css front-end in 2 separate AZ's in a VPC. If you have a custom AMI you can replace the AMI ID with yours. 
+Deploys a Website on EC2 Autoscaling groups with a simple html/css front-end in 2 separate AZ's in a VPC. If you have a custom AMI you can replace the AMI ID with yours or update the docker container with your code in the User data section (see below).
 
 In this CloudFormation template you will need:
 - [ ] 2 Public Subnets
 - [ ] VPC 
-- [ ] 1 domain - *If one is not available you can point it to Cloudfront domain and later point the Origin to ALB deployed through this template* (CloudWatch RUM will not accept ALB URL) 
+- [ ] 1 domain - *If one is not available you can point it to Cloudfront domain and later point the Origin to ALB deployed through this template* (CloudWatch RUM will not accept ALB URL).
 - [ ] Docker Hub account (free) that you can pull and push containers too. 
 
 2. Pull the docker image with the sample html site.
@@ -73,7 +73,7 @@ Click JavaScript Snippet on left column.
 ![image](https://user-images.githubusercontent.com/35279875/221306808-8a02d73a-4e3b-48c2-adeb-8386315e4940.png)
     &nbsp; <br/>
 
-6. Copy the "snippet" and paste into the <head> of your HTML or JS. 
+6. Copy the "snippet" and paste into the <head> </head> of your HTML or JS, depending on the framework you are using. 
 
 You can choose between frameworks like HTML, Javascript, or Typescript. 
 
@@ -84,7 +84,7 @@ You can choose between frameworks like HTML, Javascript, or Typescript.
 
 (HTML Example): 
 
-7. You need place snippet script in each webpage <head> to call the cwr.js to be executed on the client browser. 
+7. You need place snippet script in each webpage <head> </head> to call the cwr.js to be executed on the client browser. 
 
  &nbsp; <br/>
 ![image](https://user-images.githubusercontent.com/35279875/221362683-95027d28-eb20-4db3-a849-6904b4e3d51b.png)
@@ -93,6 +93,8 @@ You can choose between frameworks like HTML, Javascript, or Typescript.
 
 
 8. Once the snippet has been saved to your application, you can do the following commands to deploy to Docker Hub for deploying changes: 
+
+*Note - If building on an Apple Mx device use the -platform=linux/x86_64 option*
 
 ```
 docker build --platform=linux/x86_64 -t <youraccount name>/cwrumdemo .
