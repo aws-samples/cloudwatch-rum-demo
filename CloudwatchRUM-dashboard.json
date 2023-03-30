@@ -1,0 +1,144 @@
+{
+    "widgets": [
+        {
+            "height": 2,
+            "width": 6,
+            "y": 0,
+            "x": 0,
+            "type": "alarm",
+            "properties": {
+                "title": "High Alert",
+                "alarms": [
+                    "arn:aws:cloudwatch:<region>:<accountid>:alarm:RUM Alarm"
+                ]
+            }
+        },
+        {
+            "height": 4,
+            "width": 6,
+            "y": 2,
+            "x": 0,
+            "type": "metric",
+            "properties": {
+                "sparkline": true,
+                "view": "singleValue",
+                "metrics": [
+                    [ "AWS/CloudFront", "Requests", "Region", "Global", "DistributionId", "<Distribution ID>" ]
+                ],
+                "region": "<region>"
+            }
+        },
+        {
+            "height": 6,
+            "width": 6,
+            "y": 6,
+            "x": 0,
+            "type": "metric",
+            "properties": {
+                "view": "gauge",
+                "metrics": [
+                    [ "AWS/Logs", "IncomingLogEvents", "LogGroupName", "/aws/vendedlogs/<Log Group Name>" ]
+                ],
+                "region": "<region>",
+                "yAxis": {
+                    "left": {
+                        "min": 3,
+                        "max": 5000
+                    }
+                }
+            }
+        },
+        {
+            "height": 6,
+            "width": 5,
+            "y": 0,
+            "x": 6,
+            "type": "metric",
+            "properties": {
+                "view": "timeSeries",
+                "stacked": true,
+                "metrics": [
+                    [ "AWS/RUM", "WebVitalsLargestContentfulPaint", "application_name", "MyRUMdemo1" ]
+                ],
+                "region": "<region>"
+            }
+        },
+        {
+            "height": 6,
+            "width": 6,
+            "y": 0,
+            "x": 17,
+            "type": "metric",
+            "properties": {
+                "view": "timeSeries",
+                "stacked": true,
+                "metrics": [
+                    [ "AWS/RUM", "WebVitalsFirstInputDelay", "application_name", "MyRUMdemo1" ]
+                ],
+                "region": "<region>"
+            }
+        },
+        {
+            "height": 6,
+            "width": 5,
+            "y": 6,
+            "x": 6,
+            "type": "metric",
+            "properties": {
+                "metrics": [
+                    [ "AWS/RUM", "NavigationFrustratedTransaction", "application_name", "MyRUMdemo1" ]
+                ],
+                "view": "timeSeries",
+                "stacked": true,
+                "region": "<region>",
+                "period": 300,
+                "stat": "Average"
+            }
+        },
+        {
+            "height": 6,
+            "width": 6,
+            "y": 6,
+            "x": 11,
+            "type": "metric",
+            "properties": {
+                "view": "timeSeries",
+                "stacked": true,
+                "metrics": [
+                    [ "AWS/RUM", "NavigationToleratedTransaction", "application_name", "MyRUMdemo1" ]
+                ],
+                "region": "<region>"
+            }
+        },
+        {
+            "height": 6,
+            "width": 6,
+            "y": 6,
+            "x": 17,
+            "type": "metric",
+            "properties": {
+                "view": "timeSeries",
+                "stacked": true,
+                "metrics": [
+                    [ "AWS/RUM", "NavigationSatisfiedTransaction", "application_name", "MyRUMdemo1" ]
+                ],
+                "region": "<region>"
+            }
+        },
+        {
+            "height": 6,
+            "width": 6,
+            "y": 0,
+            "x": 11,
+            "type": "metric",
+            "properties": {
+                "view": "timeSeries",
+                "stacked": true,
+                "metrics": [
+                    [ "AWS/RUM", "WebVitalsCumulativeLayoutShift", "application_name", "MyRUMdemo1" ]
+                ],
+                "region": "<region>"
+            }
+        }
+    ]
+}

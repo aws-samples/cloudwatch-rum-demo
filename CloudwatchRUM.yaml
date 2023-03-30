@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Cloudwatch RUM Monitor with Cognito Identity Pools"
+
+Parameters:
+
+    DomainName: 
+        Type: String
+    ApplicationName: 
+        Type: String
+    # Use public Systems Manager Parameter
+    
+    
+Resources:
+
+    CWRumIdentityPool:
+      Type: AWS::Cognito::IdentityPool
+      Properties: 
+          IdentityPoolName: !Ref ApplicationName
+          AllowUnauthenticatedIdentities: true
+
+    CWRumIdentityPoolRoles:
+      Type: AWS::Cognito::IdentityPoolRoleAttachment
+      Properties:
+        IdentityPoolId: !Ref CWRumIdentityPool
+        Roles:
+          unauthenticated: !GetAtt CWRumClientRole.Arn
+
+    CWRumClientRole:
+                      Type: AWS::IAM::Role
+                      Properties:
+                        AssumeRolePolicyDocument:
+                          Version: 2012-10-17
+                          Statement:
+                            - Effect: Allow
+                              Principal:
+                                Federated:
+                                  - cognito-identity.amazonaws.com
+                              Action:
+                                - sts:AssumeRoleWithWebIdentity
+                              Condition:
+                                StringEquals:
+                                  cognito-identity.amazonaws.com:aud: !Ref CWRumIdentityPool
+                                ForAnyValue:StringLike: 
+                                  cognito-identity.amazonaws.com:amr: unauthenticated
+                        Description: Unauthenticated Role for AWS RUM Clients
+                        Path: /
+                        Policies:
+                          - PolicyName: AWSRumClientPut
+                            PolicyDocument:
+                              Version: "2012-10-17"
+                              Statement:
+                                - Effect: Allow
+                                  Action:
+                                    - "rum:PutRumEvents"
+                                  Resource: !Sub arn:aws:rum:${AWS::Region}:${AWS::AccountId}:appmonitor/${ApplicationName}
+    CWRumAppMonitor:
+          Type: AWS::RUM::AppMonitor
+          Properties: 
+            AppMonitorConfiguration: 
+              GuestRoleArn: !GetAtt CWRumClientRole.Arn
+              IdentityPoolId: !Ref CWRumIdentityPool
+              AllowCookies: true
+              EnableXRay: false
+              SessionSampleRate: 1
+              Telemetries:
+                - errors
+                - performance
+                - http 
+
+            CwLogEnabled: true
+            Domain: !Ref DomainName
+            Name: !Ref ApplicationName
+            #Tags: 
+            # Key: "Name"
+              #Value: "CloudWatchRUMdemo"    
+   
+
+Outputs:
+
+  CWRumAppMonitor:
+      Description: The Cloud Watch RUM App Monitor Name
+      Value: !Ref CWRumAppMonitor

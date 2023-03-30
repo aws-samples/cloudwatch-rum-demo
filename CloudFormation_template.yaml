@@ -1,0 +1,276 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "2 Tier Highly Available Arch. Creates a HTTP Webserver on EC2 with ASG and ALB."
+#EC2 = HTTP on t3.micro instance
+#Security Group = Allows inbound HTTP and HTTPs from everywhere.
+#ALB = Internet facing. Security Group. Address Type - ipv4.
+#HTTP Listner = Port 80. Forwarded to Target Group
+#Target Group = Target type - Instances
+#ASG = Desired 2, Min 2, Max 5. Scales Instances in Public Subnet 1 and 2. Associated with Target Group of the ALB.
+#ASG Scaling = Target Tracking Policy - CPUUtilization Metric @ 50.0, t3.micro, User Data script, keypair attached to every instance."
+
+Parameters:
+  VPC:
+    #Type: List<AWS::EC2::VPC::Id>
+    Type: AWS::EC2::VPC::Id
+    Description: Choose a VPC to launch your services in
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet::Id
+    Description: Choose a public subnet associated with desired AZ
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet::Id
+    Description: Choose a public subnet associated with desired AZ
+
+  # PrivateSubnet1:
+  #     Type: AWS::EC2::Subnet::Id
+  #     Description: Choose a private subnet associated with desired AZ
+
+  # PrivateSubnet2:
+  #     Type: AWS::EC2::Subnet::Id
+  #     Description: Choose a private subnet associated with desired AZ
+
+  # IpAddress:
+  #     Description: Your IP Address with CIDR that will be used to SSH into instances
+  #     Type: String
+
+  Keypair:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Choose a keypair to associate with instances to SSH in future
+  DomainName:
+    Type: String
+  ApplicationName:
+    Type: String
+  # Use Public Systems Manager Parameter
+  LatestAmiId:
+    Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
+    Default: "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
+  # WebPort:
+  #   Type: Number
+  #   Default: "80"
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: HTTP/S
+      GroupDescription: Allow Inbound HTTP and HTTPS traffic and SSH from my IP.
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: "tcp"
+          FromPort: 443
+          ToPort: 443
+          CidrIp: "0.0.0.0/0"
+
+      #SSH from my IP
+      #-
+      # IpProtocol: "tcp"
+      # FromPort: "22"
+      # ToPort: "22"
+      # #CidrIp: !Ref IpAddress
+
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: "CWRUM-Application-Load-Balancer"
+      Scheme: internet-facing
+      Type: application
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref SecurityGroup
+        #- !GetAtt SecurityGroup.GroupId
+      IpAddressType: "ipv4"
+
+  # HTTPSListener:
+  #     Type: AWS::ElasticLoadBalancingV2::Listener
+  #     Properties:
+  #         LoadBalancerArn: !Ref ALB
+  #         Port: 443
+  #         Protocol: "HTTPS"
+  #         SslPolicy: "ELBSecurityPolicy-2016-08"
+  #         Certificates:
+  #           -
+  #          CertificateArn: arn:aws:acm:us-east-1:**************:certificate*********************
+
+  #         DefaultActions:
+  #           -
+  #             Order: 1
+  #             TargetGroupArn: !Ref TargetGroup1
+  #             Type: "forward"
+
+  HTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Protocol: "HTTP"
+      Port: 80
+      DefaultActions:
+        - Order: 1
+          TargetGroupArn: !Ref TargetGroup1
+          Type: "forward"
+
+          # RedirectConfig:
+          #     Protocol: "HTTPS"
+          #     Port: "443"
+          #     Host: "#{host}"
+          #     Path: "/#{path}"
+          #     Query: "#{query}"
+          #     StatusCode: "HTTP_301"
+
+  TargetGroup1:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: "target-group-v1"
+      TargetType: "instance"
+      Port: 80
+      Protocol: "HTTP"
+      VpcId: !Ref VPC
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: "/"
+      HealthCheckPort: "traffic-port"
+      HealthCheckProtocol: "HTTP"
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: "200"
+
+  LaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      LaunchConfigurationName: CwRUMLaunchConfiguration
+      InstanceType: t3.micro
+      ImageId: !Ref LatestAmiId
+      KeyName: !Ref Keypair
+      SecurityGroups:
+        - !Ref SecurityGroup
+        #- !GetAtt SecurityGroup.GroupId
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash -xe
+          cd /
+          sudo yum update -y
+          yum install -y docker
+          service docker start
+          yum install -y aws-cfn-bootstrap
+          docker pull waday71/cwrumdemo
+          docker run -d -p 80:80 waday71/cwrumdemo
+          Fn::Sub: /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource
+            LaunchConfig --region ${AWS::Region}
+          Fn::Sub: /opt/aws/bin/cfn-signal --exit-code $? --stack ${AWS::StackName}
+            --resource ASG --region ${AWS::Region}
+
+  ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: CWRUMASG
+      DesiredCapacity: 2
+      MaxSize: 5
+      MinSize: 2
+      LaunchConfigurationName: !Ref LaunchConfig
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      #AvailabilityZones: us-east-1a
+      TargetGroupARNs:
+        - !Ref TargetGroup1
+
+  Scaling:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref ASG
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 50.0
+
+  CWRumIdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Properties:
+      IdentityPoolName: !Ref ApplicationName
+      AllowUnauthenticatedIdentities: true
+
+  CWRumIdentityPoolRoles:
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Properties:
+      IdentityPoolId: !Ref CWRumIdentityPool
+      Roles:
+        unauthenticated: !GetAtt CWRumClientRole.Arn
+
+  CWRumClientRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated:
+                - cognito-identity.amazonaws.com
+            Action:
+              - sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                cognito-identity.amazonaws.com:aud: !Ref CWRumIdentityPool
+              ForAnyValue:StringLike: 
+                cognito-identity.amazonaws.com:amr: unauthenticated
+
+      Description: Unauthenticated Role for AWS RUM Clients
+      Path: /
+      Policies:
+        - PolicyName: AWSRumClientPut
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "rum:PutRumEvents"
+                Resource: !Sub arn:aws:rum:${AWS::Region}:${AWS::AccountId}:appmonitor/${ApplicationName}
+  CWRumAppMonitor:
+    Type: AWS::RUM::AppMonitor
+    Properties:
+      AppMonitorConfiguration:
+        GuestRoleArn: !GetAtt CWRumClientRole.Arn
+        IdentityPoolId: !Ref CWRumIdentityPool
+        AllowCookies: true
+        EnableXRay: false
+        SessionSampleRate: 1
+        Telemetries:
+          - errors
+          - performance
+          - http
+      CwLogEnabled: true
+      Domain: !Ref DomainName
+      Name: !Ref ApplicationName
+
+  #Tags:
+  # Key: "Name"
+  #Value: "CloudWatchRUMdemo"
+
+Outputs:
+  # EC2DNSName:
+  #   Description: The domain name of the EC2 origin
+  #   Value: !GetAtt Instance.PublicDnsName
+
+  ALB:
+    Description: The created loadbalancer
+    Value: !GetAtt ALB.DNSName
+
+  TargetGroup1:
+    Description: The created TargetGroup 1
+    Value: !Ref TargetGroup1
+
+  SecurityGroup:
+    Description: The securty group
+    Value: !Ref SecurityGroup
+  # CWRumAppMonitor:
+  #   Description: The Cloud Watch RUM App Monitor Name
+  #   Value: !Ref CWRumAppMonitor

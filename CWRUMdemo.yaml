@@ -1,0 +1,149 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: >
+    Deploys a Cloudwatch RUM App Monitor 
+
+Parameters:
+  CognitoIdentityPoolId:
+    Type: String
+    Description: ID of the Amazon Cognito identity pool that is used to authorize the sending of data to CloudWatch RUM.
+  ApplicationDomain:
+    Type: String
+    Description: The domain that the application is hosted on - for instance xxxxxxxxx.cloudfront.net
+  AppMonitorDesc:
+    Type: String
+    Description: The desired name of the App Monitor stack
+
+Resources:
+
+  # Create the App Monitor
+  RumAppMonitor:
+    Type: 'AWS::RUM::AppMonitor'
+    Properties:
+      AppMonitorConfiguration:
+        AllowCookies: true
+        EnableXRay: true
+        IdentityPoolId: !Ref CognitoIdentityPoolId
+        SessionSampleRate: 1
+        Telemetries:
+          - 'performance'
+          - 'errors'
+          - 'http'
+      CwLogEnabled: true
+      Domain: !Ref ApplicationDomain
+      Name: !Ref AppMonitorDesc
+
+  # The custom resource allows Cloudformation to call the Lambda function which fetches the RumAppMonitorID and CognitoGuestRoleArn
+  FetchAppMonitorId:
+    Type: Custom::FetchAppMonitorId
+    Properties:
+      ServiceToken: !GetAtt FetchAppMonitorIdFunction.Arn
+      AppMonitorName: !Ref RumAppMonitor
+
+  # The RUM AppMonitorID and CognitoGuestRoleArn are not returned by Cloudformation when creating the App Monitor.
+  # The lambda function below fetches both after creation to allow them to be used to create the Javascript snippet
+  FetchAppMonitorIdFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Description: 'Deployment utility function that fetches the Cloudwatch RUM AppMonitor ID'
+      Role: !GetAtt FetchAppMonitorIdLambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          
+          
+          def handler(event, context):
+              response_data = {}
+              response_status = cfnresponse.FAILED
+          
+              if event['RequestType'] == 'Delete':
+                  response_data['AppMonitorId'] = ''
+                  response_data['CognitoGuestRoleArn'] = ''
+                  response_data['Message'] = "Delete OK"
+                  response_status = cfnresponse.SUCCESS
+              else:
+                try:
+                    rum = boto3.client('rum')
+                    app_monitor_name = event['ResourceProperties']['AppMonitorName']
+                    app_monitor_name = event['ResourceProperties']['AppMonitorName']
+            
+                    app_monitor_details = rum.get_app_monitor(
+                        Name=app_monitor_name
+                    )
+            
+                    app_monitor_id = app_monitor_details['AppMonitor']['Id']
+                    identity_pool_id = app_monitor_details['AppMonitor']['AppMonitorConfiguration']['IdentityPoolId']
+            
+                    response_data['Message'] = "App Monitor ID Fetched OK"
+            
+                    cognito = boto3.client('cognito-identity')
+                    identity_pool_roles = cognito.get_identity_pool_roles(
+                        IdentityPoolId=identity_pool_id
+                    )
+                    cognito_guest_role_arn = identity_pool_roles['Roles']['unauthenticated']
+            
+                    response_data['AppMonitorId'] = app_monitor_id
+                    response_data['CognitoGuestRoleArn'] = cognito_guest_role_arn
+            
+                    response_data['Message'] = "All information fetched OK"
+                    response_status = cfnresponse.SUCCESS
+                except Exception as e:
+                    print("Error: " + str(e))
+                    response_data['Message'] = "Resource {} failed: {}".format(event['RequestType'], e)
+              
+              cfnresponse.send(event, context, response_status, response_data)
+      Handler: index.handler
+      Runtime: python3.9
+      Timeout: 30
+
+  FetchAppMonitorIdLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: LoggingPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+        - PolicyName: RumPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rum:GetAppMonitor
+                Resource:
+                  - '*'
+        - PolicyName: CognitoIdentityPoolsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-identity:GetIdentityPoolRoles
+                Resource:
+                  - '*'
+
+Outputs:
+
+  RumAppMonitorId:
+    Description: The id of the RUM App Monitor
+    Value: !GetAtt FetchAppMonitorId.AppMonitorId
+
+  CognitoGuestRoleArn:
+    Description: The ARN of the guest Cognito role used by Cloudwatch RUM
+    Value: !GetAtt FetchAppMonitorId.CognitoGuestRoleArn
